@@ -51,25 +51,7 @@ int main(int argc, char **argv)
 	int epollfd = epoll_create(5);
 	
 	addfd(epollfd, sd);
-	/*
-	while(1)
-	{
-		char buf[128];
-		bzero(buf, sizeof(buf));
-		int rdaddrlen;
-		rd = accept(sd, (struct sockaddr *)&rdaddr, &rdaddrlen);
-		int len = recv(rd, buf, sizeof(buf), 0);
-		buf[len] = '\0';
-		printf("%s\n", buf);
-		
-		char str[128];
-//		sprintf(str,RESPONSE_PLAIN, len, "data....");
-//		char *str = RESPONSE_PLAIN;
-		send(rd, str, strlen(str), 0);
-		printf(str);
-		
-	}
-	*/
+
 	
 	char recvbuf[1024];
 	char sendbuf[1024];
@@ -99,7 +81,7 @@ int main(int argc, char **argv)
 				int len = recv(retfd, recvbuf, sizeof(recvbuf), 0);
 				printf("recvbuf: %s\n", recvbuf);
 				
-				sprintf(sendbuf, "len: %d, data:%s\n", len, "send...");
+				sprintf(sendbuf, "len: %d, data:%s\n", len, recvbuf);
 				send(retfd, sendbuf, sizeof(sendbuf), 0);
 			}
 			else

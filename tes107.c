@@ -10,9 +10,6 @@
 
 
 
-//char str[128];
-char buf[128];
-
 int main(int argc, char **argv)
 {
 	int  sd;
@@ -27,18 +24,20 @@ int main(int argc, char **argv)
 	printf("res: %d, errno: %d, %s\n", res, errno, strerror(errno));
 	
 	//sprintf(str, "%s", "send....");
-	
-	char *str = "send...";
-	
-	
-	send(sd, str, strlen(str), 0);
-	printf(str);
-	
-	bzero(buf, sizeof(buf));
-	res = recv(sd, buf, sizeof(buf), 0);
-	printf("res: %d\n", res);
-	
-	printf(buf);
-	
+	char str[1024];
+	char buf[1024];
+	while(1)
+	{
+		bzero(str, sizeof(str));
+		scanf("%s\n", str);
+		send(sd, str, strlen(str), 0);
+		
+		bzero(buf, sizeof(buf));
+		res = recv(sd, buf, sizeof(buf), 0);
+		//printf("res: %d\n", res);
+		
+		printf("recv: %s\n", buf);
+		
+	}
 	return 0;
 }
