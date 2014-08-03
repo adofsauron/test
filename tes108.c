@@ -6,18 +6,27 @@
 #include <netdb.h>
 #include <stdio.h>
 #include <unistd.h> 
+#include <sys/epoll.h>
+#include <fcntl.h>
 
-#define RESPONSE_PLAIN \
-    "HTTP/1.1 200 OK\r\n" \
-    "Connection: keep-alive\r\n" \
-    "Content-Type: text/plain\r\n" \
-    "Content-Length: %d\r\n" \
-    "\r\n" \
-    "%s\n"
+#define EVENTS_NOMBER 1024
 
-//char  *str = "HTTP/1.0 200 OK\r\nServer: BWS/1.0\r\n";
-//char *str = RESPONSE_PLAIN;
-char buf[128];
+int setNoneBlocking(int fd)
+{
+	int old = fcntl(fd, F_GETFL);
+	int new = old|O_NONBLOCK;
+	fcntl(fd, F_SETFL, new);
+	return old;
+}
+
+void addfd(int epollfd, int fd)
+{
+	struct epoll_event event;
+	event.data.fd = fd;
+	event.events = EPOLLIN;
+	epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
+	setNoneBlocking(fd);
+}
 
 int main(int argc, char **argv)
 {
@@ -38,8 +47,14 @@ int main(int argc, char **argv)
 	
 	listen(sd, 5);
 	
+	struct epoll_event events[EVENTS_NOMBER];
+	int epollfd = epoll_create(5);
+	
+	addfd(epollfd, sd);
+	/*
 	while(1)
 	{
+		char buf[128];
 		bzero(buf, sizeof(buf));
 		int rdaddrlen;
 		rd = accept(sd, (struct sockaddr *)&rdaddr, &rdaddrlen);
@@ -48,13 +63,51 @@ int main(int argc, char **argv)
 		printf("%s\n", buf);
 		
 		char str[128];
-		sprintf(str,RESPONSE_PLAIN, len, "data....");
+//		sprintf(str,RESPONSE_PLAIN, len, "data....");
 //		char *str = RESPONSE_PLAIN;
 		send(rd, str, strlen(str), 0);
 		printf(str);
 		
 	}
+	*/
 	
+	char recvbuf[1024];
+	char sendbuf[1024];
+	while(1)
+	{
+		bzero(recvbuf, sizeof(recvbuf));
+		bzero(sendbuf, sizeof(sendbuf));
+		
+		int ret = epoll_wait(epollfd, events, EVENTS_NOMBER, -1);
+		int i;
+		for(i=0;i<ret; i++)
+		{
+			int retfd = events[i].data.fd;
+			
+			if(retfd==sd)
+			{
+				struct sockaddr_in client_address;
+				socklen_t client_addrlength = sizeof(client_address);
+				int connfd = accept(sd, (struct sockaddr*)&client_address, &client_addrlength);
+				addfd(epollfd, connfd);
+			}
+			else if(events[i].events == EPOLLIN)
+			{
+				bzero(recvbuf, sizeof(recvbuf));
+				bzero(sendbuf, sizeof(sendbuf));
+				
+				int len = recv(retfd, recvbuf, sizeof(recvbuf), 0);
+				printf("recvbuf: %s\n", recvbuf);
+				
+				sprintf(sendbuf, "len: %d, data:%s\n", len, "send...");
+				send(retfd, sendbuf, sizeof(sendbuf), 0);
+			}
+			else
+			{
+				//printf("something happen...\n");
+			}
+		}
+	}
 	
 	
 	return 0;

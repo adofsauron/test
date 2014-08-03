@@ -28,7 +28,8 @@ int main(int argc, char **argv)
 	
 	//sprintf(str, "%s", "send....");
 	
-	char *str = "send...\n";
+	char *str = "send...";
+	
 	
 	send(sd, str, strlen(str), 0);
 	printf(str);
@@ -38,5 +39,6 @@ int main(int argc, char **argv)
 	printf("res: %d\n", res);
 	
 	printf(buf);
+	
 	return 0;
 }
