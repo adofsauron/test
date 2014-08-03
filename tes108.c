@@ -8,6 +8,7 @@
 #include <unistd.h> 
 #include <sys/epoll.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #define EVENTS_NOMBER 1024
 
@@ -31,16 +32,24 @@ void addfd(int epollfd, int fd)
 	setNoneBlocking(fd);
 }
 
-void work(int retfd)
+void *work(void  *fd)
 {
+		int *retfd = fd;
 		bzero(recvbuf, sizeof(recvbuf));
 		bzero(sendbuf, sizeof(sendbuf));
 		
-		int len = recv(retfd, recvbuf, sizeof(recvbuf), 0);
+		int len = recv(*retfd, recvbuf, sizeof(recvbuf), 0);
 		printf("recvbuf: %s\n", recvbuf);
 		
 		sprintf(sendbuf, "len: %d, data:%s\n", len, recvbuf);
-		send(retfd, sendbuf, sizeof(sendbuf), 0);
+		send(*retfd, sendbuf, sizeof(sendbuf), 0);
+		
+		//pthread_exit(NULL);
+}
+
+void pth_work(pthread_t *pid,void *fd)
+{
+	pthread_create(pid, NULL, work, fd);
 }
 
 int main(int argc, char **argv)
@@ -67,7 +76,7 @@ int main(int argc, char **argv)
 	
 	addfd(epollfd, sd);
 
-	
+	pthread_t pid;	
 	while(1)
 	{
 		bzero(recvbuf, sizeof(recvbuf));
@@ -88,7 +97,9 @@ int main(int argc, char **argv)
 			}
 			else if(events[i].events == EPOLLIN)
 			{
-				work(retfd);
+				
+				work(&retfd);
+				//pth_work(&pid,&retfd);
 			}
 			else
 			{
