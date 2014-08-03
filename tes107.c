@@ -10,7 +10,7 @@
 
 
 
-char str[128];
+//char str[128];
 char buf[128];
 
 int main(int argc, char **argv)
@@ -24,11 +24,19 @@ int main(int argc, char **argv)
 	sdaddr.sin_port = atoi(argv[2]);
 	
 	int res = connect(sd, (struct sockaddr *)&sdaddr, sizeof(sdaddr));
-	printf("res: %d, errno: %d\n", res, errno);
+	printf("res: %d, errno: %d, %s\n", res, errno, strerror(errno));
 	
-	sprintf(str, "%s", "send....");
+	//sprintf(str, "%s", "send....");
+	
+	char *str = "send...\n";
 	
 	send(sd, str, strlen(str), 0);
+	printf(str);
 	
+	bzero(buf, sizeof(buf));
+	res = recv(sd, buf, sizeof(buf), 0);
+	printf("res: %d\n", res);
+	
+	printf(buf);
 	return 0;
 }
