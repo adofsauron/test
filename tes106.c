@@ -54,6 +54,8 @@ int main(int argc, char **argv)
 		int new_sockfd = accept(sockfd, (struct sockaddr *)&new_address, &len);
 
 		printf("accept...\n");
+		
+		close(new_sockfd);
 	}
 	
 
