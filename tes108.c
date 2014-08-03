@@ -43,8 +43,6 @@ void *work(void  *fd)
 		
 		sprintf(sendbuf, "len: %d, data:%s\n", len, recvbuf);
 		send(*retfd, sendbuf, sizeof(sendbuf), 0);
-		
-		//pthread_exit(NULL);
 }
 
 void pth_work(pthread_t *pid,void *fd)
@@ -97,9 +95,9 @@ int main(int argc, char **argv)
 			}
 			else if(events[i].events == EPOLLIN)
 			{
-				
-				work(&retfd);
-				//pth_work(&pid,&retfd);
+				//work(&retfd);					
+				pth_work(&pid,&retfd);
+				pthread_join(pid, NULL);
 			}
 			else
 			{
