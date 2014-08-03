@@ -11,6 +11,9 @@
 
 #define EVENTS_NOMBER 1024
 
+char recvbuf[1024];
+char sendbuf[1024];
+
 int setNoneBlocking(int fd)
 {
 	int old = fcntl(fd, F_GETFL);
@@ -26,6 +29,18 @@ void addfd(int epollfd, int fd)
 	event.events = EPOLLIN;
 	epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
 	setNoneBlocking(fd);
+}
+
+void work(int retfd)
+{
+		bzero(recvbuf, sizeof(recvbuf));
+		bzero(sendbuf, sizeof(sendbuf));
+		
+		int len = recv(retfd, recvbuf, sizeof(recvbuf), 0);
+		printf("recvbuf: %s\n", recvbuf);
+		
+		sprintf(sendbuf, "len: %d, data:%s\n", len, recvbuf);
+		send(retfd, sendbuf, sizeof(sendbuf), 0);
 }
 
 int main(int argc, char **argv)
@@ -53,8 +68,6 @@ int main(int argc, char **argv)
 	addfd(epollfd, sd);
 
 	
-	char recvbuf[1024];
-	char sendbuf[1024];
 	while(1)
 	{
 		bzero(recvbuf, sizeof(recvbuf));
@@ -75,14 +88,7 @@ int main(int argc, char **argv)
 			}
 			else if(events[i].events == EPOLLIN)
 			{
-				bzero(recvbuf, sizeof(recvbuf));
-				bzero(sendbuf, sizeof(sendbuf));
-				
-				int len = recv(retfd, recvbuf, sizeof(recvbuf), 0);
-				printf("recvbuf: %s\n", recvbuf);
-				
-				sprintf(sendbuf, "len: %d, data:%s\n", len, recvbuf);
-				send(retfd, sendbuf, sizeof(sendbuf), 0);
+				work(retfd);
 			}
 			else
 			{
