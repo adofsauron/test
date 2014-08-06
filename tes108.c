@@ -15,6 +15,29 @@
 char recvbuf[1024];
 char sendbuf[1024];
 
+struct recv
+{
+	char header[256];
+	char data[1024];
+};
+
+struct sock_operations
+{
+	int (*get_sockfd)(const char *domain, int port);
+	int (*setNoneBlocking)(int fd);
+	void (*add_eventfd)(int epollfd, int fd);
+	void *(*work)(void *fd);
+	void (*pth_work)(pthread_t *pid,void *fd);
+	
+};
+
+struct  Recv_sock
+{
+	struct recv recvdata;
+	struct sock_operations operations;
+};
+
+
 int setNoneBlocking(int fd)
 {
 	int old = fcntl(fd, F_GETFL);
@@ -34,15 +57,15 @@ void addfd(int epollfd, int fd)
 
 void *work(void  *fd)
 {
-		int *retfd = fd;
-		bzero(recvbuf, sizeof(recvbuf));
-		bzero(sendbuf, sizeof(sendbuf));
-		
-		int len = recv(*retfd, recvbuf, sizeof(recvbuf), 0);
-		printf("recvbuf: %s\n", recvbuf);
-		
-		sprintf(sendbuf, "len: %d, data:%s\n", len, recvbuf);
-		send(*retfd, sendbuf, sizeof(sendbuf), 0);
+	int *retfd = fd;
+	bzero(recvbuf, sizeof(recvbuf));
+	bzero(sendbuf, sizeof(sendbuf));
+	
+	int len = recv(*retfd, recvbuf, sizeof(recvbuf), 0);
+	printf("recvbuf: %s\n", recvbuf);
+	
+	sprintf(sendbuf, "len: %d, data:%s\n", len, recvbuf);
+	send(*retfd, sendbuf, sizeof(sendbuf), 0);
 }
 
 void pth_work(pthread_t *pid,void *fd)
@@ -50,29 +73,58 @@ void pth_work(pthread_t *pid,void *fd)
 	pthread_create(pid, NULL, work, fd);
 }
 
-int main(int argc, char **argv)
+int get_sockfd(const char *domain, int port)
 {
-	int sd, rd;
-	struct sockaddr_in addr, rdaddr;
-	struct hostent *h;
+	int sd;
+	struct sockaddr_in addr;
 	
 	sd = socket(AF_INET, SOCK_STREAM, 0);
 	bzero(&addr, sizeof(addr));
 	addr.sin_family = AF_INET;
-	char *ip = argv[1];
+	const char *ip = domain;
 	inet_pton(AF_INET, ip, &addr.sin_addr);
-	addr.sin_port = atoi(argv[2]);
-
-	
+	addr.sin_port = port;	
 	int res = bind(sd, (struct sockaddr *)&addr, sizeof(addr));
-	printf("res: %d\n", res);
+	
+	sd = res>=0?sd:-1;
+	
+	return sd;
+	
+}
+
+struct sock_operations  operations = 
+{
+	.get_sockfd =  get_sockfd,
+	.setNoneBlocking = setNoneBlocking,
+	.add_eventfd = addfd,
+	.work = work,
+	.pth_work = pth_work
+};
+
+struct  Recv_sock * init(void)
+{
+	struct  Recv_sock *recv_sock = (struct Recv_sock *) malloc (sizeof(struct Recv_sock));
+	recv_sock->operations = operations;
+	
+	return recv_sock=recv_sock==NULL?NULL:recv_sock;
+}
+
+int main(int argc, char **argv)
+{
+	struct Recv_sock *recv_sock = init();
+	
+	int sd, rd;
+	
+	sd = recv_sock->operations.get_sockfd(argv[1], atoi(argv[2]));
+	
+	printf("sd: %d\n", sd);
 	
 	listen(sd, 5);
 	
 	struct epoll_event events[EVENTS_NOMBER];
 	int epollfd = epoll_create(5);
 	
-	addfd(epollfd, sd);
+	recv_sock->operations.add_eventfd(epollfd, sd);
 
 	pthread_t pid;	
 	while(1)
@@ -91,12 +143,11 @@ int main(int argc, char **argv)
 				struct sockaddr_in client_address;
 				socklen_t client_addrlength = sizeof(client_address);
 				int connfd = accept(sd, (struct sockaddr*)&client_address, &client_addrlength);
-				addfd(epollfd, connfd);
+				recv_sock->operations.add_eventfd(epollfd, connfd);
 			}
 			else if(events[i].events == EPOLLIN)
 			{
-				//work(&retfd);					
-				pth_work(&pid,&retfd);
+				recv_sock->operations.pth_work(&pid,&retfd);
 				pthread_join(pid, NULL);
 			}
 			else
@@ -104,6 +155,8 @@ int main(int argc, char **argv)
 				//printf("something happen...\n");
 			}
 		}
+		
+		
 	}
 	
 	
