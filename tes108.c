@@ -12,13 +12,17 @@
 
 #define EVENTS_NOMBER 1024
 
-char recvbuf[1024];
-char sendbuf[1024];
 
 struct recv
 {
 	char header[256];
 	char data[1024];
+	
+	char recvbuf[1024];
+	char sendbuf[1024];
+	
+	int sockedfd;
+	int retfd;
 };
 
 struct sock_operations
@@ -26,7 +30,6 @@ struct sock_operations
 	int (*get_sockfd)(const char *domain, int port);
 	int (*setNoneBlocking)(int fd);
 	void (*add_eventfd)(int epollfd, int fd);
-	void *(*work)(void *fd);
 	void (*pth_work)(pthread_t *pid,void *fd);
 	
 };
@@ -55,22 +58,24 @@ void addfd(int epollfd, int fd)
 	setNoneBlocking(fd);
 }
 
-void *work(void  *fd)
+void *work(void *recv_sock_addr)
 {
-	int *retfd = fd;
-	bzero(recvbuf, sizeof(recvbuf));
-	bzero(sendbuf, sizeof(sendbuf));
+	struct Recv_sock *recv_sock = (struct Recv_sock *) recv_sock_addr;
+	int retfd = recv_sock->recvdata.retfd;
 	
-	int len = recv(*retfd, recvbuf, sizeof(recvbuf), 0);
-	printf("recvbuf: %s\n", recvbuf);
+	bzero(recv_sock->recvdata.recvbuf, sizeof(recv_sock->recvdata.recvbuf));
+	bzero(recv_sock->recvdata.sendbuf, sizeof(recv_sock->recvdata.sendbuf));
 	
-	sprintf(sendbuf, "len: %d, data:%s\n", len, recvbuf);
-	send(*retfd, sendbuf, sizeof(sendbuf), 0);
+	int len = recv(retfd, recv_sock->recvdata.recvbuf, sizeof(recv_sock->recvdata.recvbuf), 0);
+	printf("recvbuf: %s\n", recv_sock->recvdata.recvbuf);
+	
+	sprintf(recv_sock->recvdata.sendbuf, "len: %d, data:%s\n", len, recv_sock->recvdata.recvbuf);
+	send(retfd, recv_sock->recvdata.sendbuf, sizeof(recv_sock->recvdata.sendbuf), 0);
 }
 
-void pth_work(pthread_t *pid,void *fd)
+void pth_work(pthread_t *pid,void *recv_sock)
 {
-	pthread_create(pid, NULL, work, fd);
+	pthread_create(pid, NULL, work, recv_sock);
 }
 
 int get_sockfd(const char *domain, int port)
@@ -97,7 +102,6 @@ struct sock_operations  operations =
 	.get_sockfd =  get_sockfd,
 	.setNoneBlocking = setNoneBlocking,
 	.add_eventfd = addfd,
-	.work = work,
 	.pth_work = pth_work
 };
 
@@ -113,41 +117,37 @@ int main(int argc, char **argv)
 {
 	struct Recv_sock *recv_sock = init();
 	
-	int sd, rd;
+	recv_sock->recvdata.sockedfd = recv_sock->operations.get_sockfd(argv[1], atoi(argv[2]));
 	
-	sd = recv_sock->operations.get_sockfd(argv[1], atoi(argv[2]));
+	printf("sd: %d\n", recv_sock->recvdata.sockedfd);
 	
-	printf("sd: %d\n", sd);
-	
-	listen(sd, 5);
+	listen(recv_sock->recvdata.sockedfd, 5);
 	
 	struct epoll_event events[EVENTS_NOMBER];
 	int epollfd = epoll_create(5);
 	
-	recv_sock->operations.add_eventfd(epollfd, sd);
+	recv_sock->operations.add_eventfd(epollfd, recv_sock->recvdata.sockedfd);
 
 	pthread_t pid;	
 	while(1)
 	{
-		bzero(recvbuf, sizeof(recvbuf));
-		bzero(sendbuf, sizeof(sendbuf));
 		
 		int ret = epoll_wait(epollfd, events, EVENTS_NOMBER, -1);
 		int i;
 		for(i=0;i<ret; i++)
 		{
-			int retfd = events[i].data.fd;
+			recv_sock->recvdata.retfd = events[i].data.fd;
 			
-			if(retfd==sd)
+			if(recv_sock->recvdata.retfd==recv_sock->recvdata.sockedfd)
 			{
 				struct sockaddr_in client_address;
 				socklen_t client_addrlength = sizeof(client_address);
-				int connfd = accept(sd, (struct sockaddr*)&client_address, &client_addrlength);
+				int connfd = accept(recv_sock->recvdata.sockedfd, (struct sockaddr*)&client_address, &client_addrlength);
 				recv_sock->operations.add_eventfd(epollfd, connfd);
 			}
 			else if(events[i].events == EPOLLIN)
 			{
-				recv_sock->operations.pth_work(&pid,&retfd);
+				recv_sock->operations.pth_work(&pid,recv_sock);
 				pthread_join(pid, NULL);
 			}
 			else
